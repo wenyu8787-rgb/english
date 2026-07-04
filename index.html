@@ -1,0 +1,399 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>單字氣球殺手</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    * { box-sizing: border-box; }
+    body { margin: 0; overflow: hidden; font-family: "Noto Sans TC", "Microsoft JhengHei", sans-serif; }
+    .sky {
+      background:
+        radial-gradient(circle at 15% 18%, rgba(255,255,255,.85) 0 4%, transparent 4.3%),
+        radial-gradient(circle at 82% 24%, rgba(255,255,255,.7) 0 5%, transparent 5.3%),
+        linear-gradient(180deg, #7dd3fc 0%, #bae6fd 62%, #dcfce7 100%);
+    }
+    .balloon {
+      position: absolute;
+      left: 0;
+      top: 0;
+      width: 112px;
+      height: 124px;
+      border-radius: 50% 50% 46% 46%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 14px;
+      color: white;
+      font-size: 1.05rem;
+      font-weight: 900;
+      letter-spacing: .02em;
+      text-shadow: 0 2px 3px rgba(0,0,0,.25);
+      box-shadow: inset -12px -16px 22px rgba(0,0,0,.15), inset 10px 9px 14px rgba(255,255,255,.28), 0 12px 20px rgba(2,132,199,.2);
+      cursor: crosshair;
+      user-select: none;
+      will-change: transform;
+      z-index: 10;
+    }
+    .balloon::before {
+      content: "";
+      position: absolute;
+      width: 17px;
+      height: 13px;
+      left: 50%;
+      bottom: -7px;
+      transform: translateX(-50%);
+      background: inherit;
+      clip-path: polygon(50% 0, 100% 100%, 0 100%);
+    }
+    .balloon::after {
+      content: "";
+      position: absolute;
+      width: 2px;
+      height: 50px;
+      left: 50%;
+      top: 100%;
+      background: rgba(71,85,105,.55);
+    }
+    .shine { position:absolute; width:18px; height:30px; border-radius:50%; background:rgba(255,255,255,.55); top:18px; left:22px; transform:rotate(28deg); }
+    .shake { animation: shake .42s ease-in-out; }
+    .pop { animation: pop .24s ease-out forwards; pointer-events: none; }
+    .score-up { animation: scorePulse .35s ease; }
+    @keyframes shake { 0%,100%{margin-left:0} 20%{margin-left:-12px} 40%{margin-left:11px} 60%{margin-left:-8px} 80%{margin-left:6px} }
+    @keyframes pop { 0%{scale:1;opacity:1} 65%{scale:1.35;opacity:.8} 100%{scale:.15;opacity:0} }
+    @keyframes scorePulse { 50%{transform:scale(1.25) rotate(3deg)} }
+    @media (max-width: 640px) {
+      .balloon { width: 88px; height: 98px; font-size: .86rem; }
+      .balloon::after { height: 35px; }
+    }
+  </style>
+</head>
+<body>
+  <main id="game" class="sky relative h-dvh w-screen overflow-hidden" aria-label="單字氣球殺手遊戲">
+    <header class="pointer-events-none absolute inset-x-0 top-0 z-30 flex items-start justify-between gap-4 p-4 sm:p-7">
+      <section class="max-w-[78%] rounded-[2rem] border-4 border-white/80 bg-white/90 px-6 py-4 shadow-2xl backdrop-blur sm:px-10">
+        <p class="text-sm font-bold tracking-widest text-sky-600 sm:text-lg">🎯 找到對應的英文單字</p>
+        <h1 id="question" class="mt-1 text-4xl font-black text-slate-800 sm:text-6xl lg:text-7xl">蘋果</h1>
+      </section>
+      <div class="flex flex-col gap-2 sm:flex-row">
+        <section id="timerCard" class="rounded-3xl border-4 border-white/80 bg-rose-500 px-5 py-3 text-center text-white shadow-xl sm:px-7">
+          <p class="text-xs font-bold sm:text-base">⏱️ 剩餘時間</p>
+          <p id="timer" class="text-3xl font-black tabular-nums sm:text-5xl">30</p>
+        </section>
+        <section class="rounded-3xl border-4 border-yellow-200 bg-yellow-300 px-5 py-3 text-center shadow-xl sm:px-8">
+          <p class="text-xs font-bold text-amber-800 sm:text-base">⭐ 分數</p>
+          <p id="score" class="text-3xl font-black tabular-nums text-amber-950 sm:text-5xl">0</p>
+        </section>
+      </div>
+    </header>
+
+    <div id="balloonArea" class="absolute inset-0" aria-live="polite"></div>
+
+    <div class="pointer-events-none absolute inset-x-0 bottom-0 z-20 h-20 bg-gradient-to-t from-green-400/70 to-transparent"></div>
+    <p id="feedback" class="pointer-events-none absolute bottom-6 left-1/2 z-40 -translate-x-1/2 rounded-full bg-slate-900/80 px-6 py-3 text-lg font-black text-white opacity-0 shadow-xl transition-opacity" aria-live="assertive"></p>
+
+    <section id="startScreen" class="absolute inset-0 z-50 grid place-items-center bg-sky-950/45 p-5 backdrop-blur-sm">
+      <div class="w-full max-w-lg rounded-[2.5rem] border-4 border-white bg-white p-7 text-center shadow-2xl sm:p-10">
+        <div class="text-7xl">🎈</div>
+        <h2 class="mt-2 text-4xl font-black text-sky-700 sm:text-5xl">單字氣球殺手</h2>
+        <p class="mt-4 text-lg font-bold leading-relaxed text-slate-600">看中文題目，點擊正確的英文氣球！<br><span class="text-emerald-600">答對 +10 分</span>，<span class="text-rose-500">答錯 −5 分</span></p>
+        <button id="startButton" class="mt-7 w-full rounded-2xl bg-gradient-to-r from-fuchsia-500 to-rose-500 px-8 py-4 text-2xl font-black text-white shadow-[0_8px_0_#be185d] transition hover:-translate-y-1 hover:brightness-110 active:translate-y-2 active:shadow-none">開始遊戲！</button>
+      </div>
+    </section>
+
+    <section id="endScreen" class="absolute inset-0 z-50 hidden place-items-center overflow-y-auto bg-sky-950/55 p-5 backdrop-blur-sm">
+      <div class="my-5 w-full max-w-lg rounded-[2.5rem] border-4 border-white bg-white p-7 text-center shadow-2xl sm:p-9">
+        <div class="text-6xl">🏆</div>
+        <h2 class="mt-1 text-4xl font-black text-fuchsia-700">時間到！</h2>
+        <p class="mt-3 text-lg font-bold text-slate-500">本局得分</p>
+        <p id="finalScore" class="text-6xl font-black text-amber-500">0</p>
+        <div class="mt-5 flex gap-2">
+          <input id="playerName" maxlength="12" autocomplete="off" placeholder="輸入名字" class="min-w-0 flex-1 rounded-2xl border-4 border-sky-200 px-4 py-3 text-lg font-bold outline-none focus:border-sky-500">
+          <button id="saveScoreButton" class="rounded-2xl bg-emerald-500 px-5 py-3 font-black text-white shadow-[0_5px_0_#047857] active:translate-y-1 active:shadow-none">登上榜單</button>
+        </div>
+        <div class="mt-6 rounded-3xl bg-sky-50 p-4">
+          <h3 class="text-xl font-black text-sky-700">🌟 排行榜 TOP 5</h3>
+          <ol id="leaderboard" class="mt-3 space-y-2 text-left"></ol>
+          <p id="leaderboardStatus" class="mt-3 text-sm font-bold text-slate-500"></p>
+        </div>
+        <button id="restartButton" class="mt-6 w-full rounded-2xl bg-gradient-to-r from-fuchsia-500 to-rose-500 px-8 py-4 text-xl font-black text-white shadow-[0_7px_0_#be185d] active:translate-y-2 active:shadow-none">再玩一次</button>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    // 將 GAS 部署為網頁應用程式後，把 /exec 網址貼在下方引號內。
+    const GAS_API_URL = "https://script.google.com/macros/s/AKfycbwPnNSpbwc6T3YDytkdXrHuGbZ47jP1jd_dPhoxXvlznJsM2Yve0lnh6hlhviojN7NCGA/exec";
+
+    const vocabulary = [
+      { word: "apple", meaning: "蘋果" }, { word: "beautiful", meaning: "美麗的" },
+      { word: "computer", meaning: "電腦" }, { word: "delicious", meaning: "美味的" },
+      { word: "elephant", meaning: "大象" }, { word: "friend", meaning: "朋友" },
+      { word: "hospital", meaning: "醫院" }, { word: "important", meaning: "重要的" },
+      { word: "library", meaning: "圖書館" }, { word: "umbrella", meaning: "雨傘" }
+    ];
+    const colors = ["#f43f5e", "#f97316", "#eab308", "#22c55e", "#06b6d4", "#3b82f6", "#8b5cf6", "#d946ef"];
+    const area = document.getElementById("balloonArea");
+    const questionEl = document.getElementById("question");
+    const scoreEl = document.getElementById("score");
+    const feedbackEl = document.getElementById("feedback");
+    const GAME_SECONDS = 30;
+    let score = 0, questionIndex = 0, running = false, lastTime = 0;
+    let endAt = 0, lastShownSecond = GAME_SECONDS, scoreSaved = false;
+    let balloons = [];
+    let audioContext;
+
+    function playTone(frequency, duration, type = "sine", volume = .12, delay = 0) {
+      audioContext ||= new (window.AudioContext || window.webkitAudioContext)();
+      const start = audioContext.currentTime + delay;
+      const oscillator = audioContext.createOscillator();
+      const gain = audioContext.createGain();
+      oscillator.type = type;
+      oscillator.frequency.setValueAtTime(frequency, start);
+      gain.gain.setValueAtTime(volume, start);
+      gain.gain.exponentialRampToValueAtTime(.001, start + duration);
+      oscillator.connect(gain).connect(audioContext.destination);
+      oscillator.start(start);
+      oscillator.stop(start + duration);
+    }
+
+    function soundCorrect() {
+      playTone(520, .16, "sine");
+      playTone(780, .22, "sine", .12, .1);
+    }
+    function soundWrong() { playTone(150, .3, "sawtooth", .08); }
+    function soundPop() { playTone(90, .09, "square", .08); }
+
+    function pickNextQuestion() {
+      let next;
+      do next = Math.floor(Math.random() * vocabulary.length); while (next === questionIndex);
+      questionIndex = next;
+      questionEl.textContent = vocabulary[questionIndex].meaning;
+    }
+
+    function createBalloon(entry, stagger = false) {
+      const el = document.createElement("div");
+      el.className = "balloon";
+      el.style.backgroundColor = colors[Math.floor(Math.random() * colors.length)];
+      el.innerHTML = `<span class="shine"></span><span>${entry.word}</span>`;
+      el.setAttribute("role", "button");
+      el.setAttribute("aria-label", `英文單字 ${entry.word}`);
+      area.appendChild(el);
+      const size = innerWidth < 640 ? 88 : 112;
+      const balloon = {
+        el, entry, size,
+        x: Math.random() * Math.max(1, innerWidth - size),
+        y: innerHeight + (stagger ? Math.random() * innerHeight * 1.15 : 90),
+        speed: 22 + Math.random() * 20,
+        phase: Math.random() * Math.PI * 2,
+        sway: 12 + Math.random() * 20,
+        disabled: false
+      };
+      el.addEventListener("pointerdown", () => hitBalloon(balloon));
+      balloons.push(balloon);
+    }
+
+    function hitBalloon(balloon) {
+      if (!running || balloon.disabled) return;
+      if (balloon.entry.word === vocabulary[questionIndex].word) {
+        balloon.disabled = true;
+        score += 10;
+        soundPop();
+        soundCorrect();
+        updateScore("答對了！＋10");
+        balloon.el.classList.add("pop");
+        setTimeout(() => {
+          removeBalloon(balloon);
+          pickNextQuestion();
+          ensureAnswerBalloon();
+        }, 230);
+      } else {
+        score -= 5;
+        soundWrong();
+        updateScore("再試一次！−5");
+        balloon.el.classList.remove("shake");
+        void balloon.el.offsetWidth;
+        balloon.el.classList.add("shake");
+      }
+    }
+
+    function updateScore(message) {
+      scoreEl.textContent = score;
+      scoreEl.classList.remove("score-up");
+      void scoreEl.offsetWidth;
+      scoreEl.classList.add("score-up");
+      feedbackEl.textContent = message;
+      feedbackEl.style.opacity = "1";
+      clearTimeout(updateScore.timer);
+      updateScore.timer = setTimeout(() => feedbackEl.style.opacity = "0", 800);
+    }
+
+    function removeBalloon(balloon) {
+      balloon.el.remove();
+      balloons = balloons.filter(b => b !== balloon);
+    }
+
+    function ensureAnswerBalloon() {
+      const answer = vocabulary[questionIndex].word;
+      if (!balloons.some(b => !b.disabled && b.entry.word === answer)) {
+        createBalloon(vocabulary[questionIndex]);
+      }
+    }
+
+    function animate(time) {
+      if (!running) return;
+      const secondsLeft = Math.max(0, Math.ceil((endAt - performance.now()) / 1000));
+      if (secondsLeft !== lastShownSecond) {
+        lastShownSecond = secondsLeft;
+        document.getElementById("timer").textContent = secondsLeft;
+        if (secondsLeft <= 5 && secondsLeft > 0) playTone(440, .08, "square", .05);
+      }
+      if (secondsLeft <= 0) {
+        finishGame();
+        return;
+      }
+      const dt = Math.min((time - lastTime) / 1000, .04) || 0;
+      lastTime = time;
+      for (const b of [...balloons]) {
+        if (b.disabled) continue;
+        b.y -= b.speed * dt;
+        const swayX = Math.sin(time / 900 + b.phase) * b.sway;
+        const safeX = Math.max(0, Math.min(innerWidth - b.size, b.x + swayX));
+        b.el.style.transform = `translate3d(${safeX}px, ${b.y}px, 0)`;
+        if (b.y < -b.size - 65) {
+          const entry = b.entry;
+          removeBalloon(b);
+          createBalloon(entry);
+        }
+      }
+      ensureAnswerBalloon();
+      requestAnimationFrame(animate);
+    }
+
+    function isGasConfigured() {
+      return /^https:\/\/script\.google\.com\/macros\/s\/.+\/exec$/.test(GAS_API_URL);
+    }
+
+    async function getScores() {
+      if (!isGasConfigured()) throw new Error("尚未設定 GAS 網址");
+      const response = await fetch(`${GAS_API_URL}?action=list&t=${Date.now()}`);
+      if (!response.ok) throw new Error("無法讀取排行榜");
+      const contentType = response.headers.get("content-type") || "";
+      if (!contentType.includes("application/json")) {
+        throw new Error("GAS 尚未開放「所有人」存取");
+      }
+      const result = await response.json();
+      if (!result.ok) throw new Error(result.error || "讀取失敗");
+      return result.scores || [];
+    }
+
+    async function renderLeaderboard() {
+      const list = document.getElementById("leaderboard");
+      const status = document.getElementById("leaderboardStatus");
+      const medals = ["🥇", "🥈", "🥉", "4️⃣", "5️⃣"];
+      list.innerHTML = '<li class="py-3 text-center font-bold text-sky-500">正在讀取雲端排行榜…</li>';
+      status.textContent = "";
+      try {
+        const scores = (await getScores()).slice(0, 5);
+        list.innerHTML = scores.length
+          ? scores.map((item, i) => `<li class="flex items-center justify-between rounded-xl bg-white px-4 py-2 font-bold shadow-sm"><span>${medals[i]} ${escapeHtml(item.name)}</span><span class="text-fuchsia-600">${Number(item.score)} 分</span></li>`).join("")
+          : '<li class="py-3 text-center font-bold text-slate-400">還沒有紀錄，等你來挑戰！</li>';
+        status.textContent = "☁️ Google Sheet 雲端排行榜";
+      } catch (error) {
+        list.innerHTML = '<li class="py-3 text-center font-bold text-rose-500">排行榜目前無法載入</li>';
+        status.textContent = isGasConfigured() ? "請確認網路及 GAS 部署權限" : "請先在 index.html 設定 GAS_API_URL";
+      }
+    }
+
+    function escapeHtml(text) {
+      const div = document.createElement("div");
+      div.textContent = text;
+      return div.innerHTML;
+    }
+
+    async function saveScore() {
+      if (scoreSaved) return;
+      const input = document.getElementById("playerName");
+      const name = input.value.trim() || "神秘高手";
+      const button = document.getElementById("saveScoreButton");
+      button.disabled = true;
+      button.textContent = "上傳中…";
+      button.classList.add("opacity-60");
+      try {
+        if (!isGasConfigured()) throw new Error("尚未設定 GAS 網址");
+        const response = await fetch(GAS_API_URL, {
+          method: "POST",
+          body: new URLSearchParams({ action: "add", name, score: String(score) })
+        });
+        if (!response.ok) throw new Error("上傳失敗");
+        const contentType = response.headers.get("content-type") || "";
+        if (!contentType.includes("application/json")) {
+          throw new Error("GAS 尚未開放「所有人」存取");
+        }
+        const result = await response.json();
+        if (!result.ok) throw new Error(result.error || "儲存失敗");
+        scoreSaved = true;
+        input.disabled = true;
+        button.textContent = "已儲存 ✓";
+        playTone(660, .15); playTone(880, .2, "sine", .1, .12);
+        await renderLeaderboard();
+      } catch (error) {
+        button.disabled = false;
+        button.textContent = "重新上傳";
+        button.classList.remove("opacity-60");
+        document.getElementById("leaderboardStatus").textContent = `⚠️ ${error.message}`;
+        soundWrong();
+      }
+    }
+
+    function finishGame() {
+      running = false;
+      document.getElementById("timer").textContent = "0";
+      document.getElementById("finalScore").textContent = score;
+      document.getElementById("endScreen").classList.remove("hidden");
+      document.getElementById("endScreen").classList.add("grid");
+      playTone(392, .2); playTone(330, .25, "sine", .1, .18); playTone(262, .4, "sine", .1, .38);
+      renderLeaderboard();
+      setTimeout(() => document.getElementById("playerName").focus(), 100);
+    }
+
+    function startGame() {
+      audioContext ||= new (window.AudioContext || window.webkitAudioContext)();
+      if (audioContext.state === "suspended") audioContext.resume();
+      document.getElementById("startScreen").classList.add("hidden");
+      document.getElementById("endScreen").classList.add("hidden");
+      document.getElementById("endScreen").classList.remove("grid");
+      balloons.forEach(b => b.el.remove());
+      balloons = [];
+      running = true;
+      score = 0;
+      scoreSaved = false;
+      scoreEl.textContent = "0";
+      lastShownSecond = GAME_SECONDS;
+      document.getElementById("timer").textContent = GAME_SECONDS;
+      endAt = performance.now() + GAME_SECONDS * 1000;
+      const input = document.getElementById("playerName");
+      input.value = "";
+      input.disabled = false;
+      const saveButton = document.getElementById("saveScoreButton");
+      saveButton.disabled = false;
+      saveButton.textContent = "登上榜單";
+      saveButton.classList.remove("opacity-60");
+      questionIndex = Math.floor(Math.random() * vocabulary.length);
+      questionEl.textContent = vocabulary[questionIndex].meaning;
+      vocabulary.forEach(entry => createBalloon(entry, true));
+      lastTime = performance.now();
+      requestAnimationFrame(animate);
+    }
+
+    document.getElementById("startButton").addEventListener("click", startGame);
+    document.getElementById("restartButton").addEventListener("click", startGame);
+    document.getElementById("saveScoreButton").addEventListener("click", saveScore);
+    document.getElementById("playerName").addEventListener("keydown", event => {
+      if (event.key === "Enter") saveScore();
+    });
+    addEventListener("resize", () => balloons.forEach(b => b.x = Math.min(b.x, innerWidth - b.size)));
+  </script>
+</body>
+</html>
